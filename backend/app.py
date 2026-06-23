@@ -91,6 +91,11 @@ def login_api():
     if not check_password_hash(user.password,password):
         return jsonify({"message":"Invalid password"}),401
     
+    if not user.active_status:
+        return jsonify({
+            "message": "Your account has been blocked"
+        }), 403
+    
 
     access_token = create_access_token(identity=str(user.id),additional_claims={"role": user.role})
 
@@ -179,6 +184,175 @@ def delete_trek_api(trek_id):
     db.session.commit()
 
     return jsonify({"message":"Trek deleted successfully"}),200
+
+
+
+@app.route("/admin/add_staff",methods=["POST"])
+@jwt_required()
+def add_staff_api():
+    claim=get_jwt()
+    if claim["role"]!="admin":
+        return jsonify({"message":"Access denied"}),403
+    
+    data=request.get_json()
+
+    if not data:
+        return jsonify({"message":"No data provided"}),400
+    
+    username=data.get("username")
+    email=data.get("email")
+    password=data.get("password")
+    full_name=data.get("full_name")
+    phone=data.get("phone")
+    age=data.get("age")
+    gender=data.get("gender")
+    address=data.get("address")
+
+    if not username or not email or not password:
+        return jsonify({
+            "message":"Username, email and password are required"
+        }),400
+    
+    existing_user = User.query.filter_by(username=username).first()
+
+    if existing_user:
+        return jsonify({
+            "message":"Username already exists"
+        }),400
+    
+    existing_email = User.query.filter_by(email=email).first()
+
+    if existing_email:
+        return jsonify({
+            "message":"Email already exists"
+        }),400
+    
+    hashed_password = generate_password_hash(password)
+    
+
+    if not all([full_name,phone,age,gender,address]):
+        return jsonify({
+            "message":"All fields are required for profile"
+        }),400
+    
+    user=User(username=username,email=email,password=hashed_password,role="staff")
+    db.session.add(user)
+    db.session.flush()  # gets user.id without committing
+    
+    user_profile=UserProfile(user_id=user.id,full_name=full_name,phone=phone,age=age,gender=gender,address=address)
+    db.session.add(user_profile)
+    db.session.commit()
+
+    return jsonify({"message":"Staff added successfully",
+                    "staff_id":user.id,
+                    "staff_username":user.username}),201
+
+
+
+@app.route("/admin/block_staff/<int:staff_id>",methods=["PUT"])
+@jwt_required()
+def block_staff_api(staff_id):
+    claim=get_jwt()
+    if claim["role"]!="admin":
+        return jsonify({"message":"Access denied"}),403
+    
+    staff=User.query.get(staff_id)
+
+    if not staff:
+        return jsonify({"message":"Staff not found"}),404
+    
+    if staff.role != "staff":
+        return jsonify({"message":"User is not staff"}),400
+    
+
+    staff.active_status=False
+    db.session.commit()
+
+    return jsonify({"message":"Staff blocked successfully"}),200
+
+@app.route("/admin/block_user/<int:user_id>",methods=["PUT"])
+@jwt_required()
+def block_user_api(user_id):
+    claim=get_jwt()
+    if claim["role"]!="admin":
+        return jsonify({"message":"Access denied"}),403
+    
+    user=User.query.get(user_id)
+
+    if not user:
+        return jsonify({"message":"User not found"}),404
+    
+    if user.role != "trekker":
+        return jsonify({"message":"User is not trekker"}),400
+
+    user.active_status=False
+    db.session.commit()
+
+    return jsonify({"message":"User blocked successfully"}),200
+
+
+@app.route("/admin/assign_staff", methods=["POST"])
+@jwt_required()
+def assign_staff_api():
+    claim = get_jwt()
+
+    if claim["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"message": "No data provided"}), 400
+
+    trek_id = data.get("trek_id")
+    staff_id = data.get("staff_id")
+
+    if not trek_id or not staff_id:
+        return jsonify({
+            "message": "trek_id and staff_id are required"
+        }), 400
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({"message": "Trek not found"}), 404
+
+    staff = User.query.get(staff_id)
+
+    if not staff:
+        return jsonify({"message": "Staff not found"}), 404
+
+    if staff.role != "staff":
+        return jsonify({"message": "User is not staff"}), 400
+
+    existing_assignment = StaffAssignment.query.filter_by(
+        trek_id=trek_id,
+        staff_id=staff_id
+    ).first()
+
+    if existing_assignment:
+        return jsonify({
+            "message": "Staff already assigned to this trek"
+        }), 400
+
+
+    existing_trek_assignment = StaffAssignment.query.filter_by(
+        trek_id=trek_id
+    ).first()
+    
+    if existing_trek_assignment:
+        return jsonify({
+            "message": "A staff member is already assigned to this trek"
+        }), 400
+
+    staff_assignment = StaffAssignment(staff_id=staff_id,trek_id=trek_id,assigned_at=datetime.utcnow())
+
+    db.session.add(staff_assignment)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Staff assigned successfully"
+    }), 201
 # ---------------------------------------------------------------------------------------------------------
 
 

@@ -10,11 +10,11 @@ class User(db.Model):
     role = db.Column(db.String(120), nullable=False)
     active_status = db.Column(db.Boolean, nullable=False, default=True)
 
-    profile = db.relationship("UserProfile",backref="user",uselist=False)
+    profile = db.relationship("UserProfile",backref="user",uselist=False,cascade="all, delete-orphan")
 
-    bookings = db.relationship("Booking",backref="user")
+    bookings = db.relationship("Booking",backref="user",cascade="all, delete-orphan")
 
-    staff_assignments = db.relationship("StaffAssignment",backref="staff",foreign_keys="StaffAssignment.staff_id")
+    staff_assignments = db.relationship("StaffAssignment",backref="staff",foreign_keys="StaffAssignment.staff_id",cascade="all, delete-orphan")
 
 
 class UserProfile(db.Model):
