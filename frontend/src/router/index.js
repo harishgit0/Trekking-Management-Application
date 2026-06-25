@@ -1,13 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LandingPage from '../views/LandingPage.vue'
+import LoginView from '../views/LoginView.vue'
 import AdminView from '../views/AdminView.vue'
 import UserView from '../views/UserView.vue'
+import RegisterView from '../views/RegisterView.vue'
 
 const routes = [
-  { path: '/', component: LandingPage },
+  { path: '/', component: LoginView },
+  { path: '/register', component: RegisterView },
   { path: '/admin', component: AdminView },
-  { path: '/user', component: UserView },
-  { path: '/:pathMatch(.*)*', redirect: '/' }
+  { path: '/user', component: UserView }
 ]
 
 const router = createRouter({
