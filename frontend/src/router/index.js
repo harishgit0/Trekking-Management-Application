@@ -1,19 +1,30 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '../views/LoginView.vue'
-import AdminView from '../views/AdminView.vue'
-import UserView from '../views/UserView.vue'
-import RegisterView from '../views/RegisterView.vue'
+import { createRouter, createWebHistory } from "vue-router"
+import HomeView from "../views/HomeView.vue"
+import Login from "../views/Login.vue"
+import Register from "../views/Register.vue"
+import AdminDashboard from "../views/AdminDashboard.vue"
 
-const routes = [
-  { path: '/', component: LoginView },
-  { path: '/register', component: RegisterView },
-  { path: '/admin', component: AdminView },
-  { path: '/user', component: UserView }
+const routes=[
+    {
+        path :"/",component:HomeView
+    },
+    {
+        path :"/login",component:Login
+    },
+    {
+        path :"/register",component:Register
+    },
+    {
+        path :"/admin",component:AdminDashboard
+    }
 ]
+
 
 const router = createRouter({
   history: createWebHistory(),
   routes
-})
+})  
+
+
 
 export default router
