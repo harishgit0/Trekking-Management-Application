@@ -134,8 +134,8 @@ def create_trek_api():
     location=data.get("location")
     description=data.get("description")
     difficulty=data.get("difficulty")
-    duration_days=data.get("duration_days")
-    total_slots=data.get("total_slots")
+    duration_days=int(data.get("duration_days"))
+    total_slots=int(data.get("total_slots"))
     start_date = data.get("start_date")
     end_date = data.get("end_date")
 
@@ -171,6 +171,34 @@ def create_trek_api():
     return jsonify({"message":"Trek created successfully","trek_id":trek.id}),201
 
 
+@app.route("/admin/get_trek/<int:trek_id>", methods=["GET"])
+@jwt_required()
+def get_trek_api(trek_id):
+
+    claim = get_jwt()
+
+    if claim["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({"message": "Trek not found"}), 404
+
+    return jsonify(trek.to_dict()), 200
+
+
+@app.route("/admin/get_treks",methods=["GET"])
+@jwt_required()
+def get_treks_api():
+    claim=get_jwt()
+    if claim["role"]!="admin":
+        return jsonify({"message":"Access denied"}),403
+    
+    treks=Trek.query.all()
+
+    return jsonify({"treks":[trek.to_dict() for trek in treks]}),200
+
 @app.route("/admin/delete_trek/<int:trek_id>",methods=["DELETE"])
 @jwt_required()
 def delete_trek_api(trek_id):
@@ -188,7 +216,36 @@ def delete_trek_api(trek_id):
 
     return jsonify({"message":"Trek deleted successfully"}),200
 
+@app.route("/admin/update_trek/<int:trek_id>", methods=["PUT"])
+@jwt_required()
+def update_trek_api(trek_id):
 
+    claim = get_jwt()
+
+    if claim["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({"message": "Trek not found"}), 404
+
+    data = request.get_json()
+
+    trek.trek_name = data.get("trek_name")
+    trek.location = data.get("location")
+    trek.description = data.get("description")
+    trek.difficulty = data.get("difficulty")
+    trek.duration_days = data.get("duration_days")
+    trek.total_slots = data.get("total_slots")
+    trek.available_slots = data.get("available_slots")
+    trek.status = data.get("status")
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Trek updated successfully"
+    }), 200
 
 @app.route("/admin/add_staff",methods=["POST"])
 @jwt_required()

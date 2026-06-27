@@ -51,6 +51,20 @@ class Trek(db.Model):
 
     staff_assignments = db.relationship("StaffAssignment",backref="trek")
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "trek_name": self.trek_name,
+            "location": self.location,
+            "description": self.description,
+            "difficulty": self.difficulty,
+            "duration_days": self.duration_days,
+            "total_slots": self.total_slots,
+            "available_slots": self.available_slots,
+            "status": self.status,
+            "start_date": str(self.start_date),
+            "end_date": str(self.end_date)
+        }
 
 class Booking(db.Model):
     __tablename__ = "booking"
