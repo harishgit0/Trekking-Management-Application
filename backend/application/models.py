@@ -16,6 +16,16 @@ class User(db.Model):
 
     staff_assignments = db.relationship("StaffAssignment",backref="staff",foreign_keys="StaffAssignment.staff_id",cascade="all, delete-orphan")
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "role": self.role,
+            "active_status": self.active_status,
+            "full_name": self.profile.full_name if self.profile else "",
+            "phone": self.profile.phone if self.profile else ""
+        }
 
 class UserProfile(db.Model):
     __tablename__ = "user_profile"
@@ -81,6 +91,16 @@ class Booking(db.Model):
         name='unique_user_trek_booking'
     ),
 )
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "trek_id": self.trek_id,
+            "user_name": self.user.username if self.user else None,
+            "trek_name": self.trek.trek_name if self.trek else None,
+            "booking_date": self.booking_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "status": self.booking_status
+        }
 
 
 class StaffAssignment(db.Model):

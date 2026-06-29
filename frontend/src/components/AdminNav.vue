@@ -40,7 +40,7 @@
           Staff
         </router-link>
 
-        <router-link to="/admin/bookings">
+        <router-link to="/admin/booking">
           Bookings
         </router-link>
 

@@ -15,7 +15,7 @@
               Register
             </h2>
 
-            <form>
+            <form @submit.prevent="register">
 
               <div class="mb-3">
                 <label class="form-label">Username</label>
@@ -23,6 +23,7 @@
                   type="text"
                   class="form-control"
                   placeholder="Enter username"
+                  v-model="username"
                 >
               </div>
 
@@ -32,6 +33,7 @@
                   type="email"
                   class="form-control"
                   placeholder="Enter email"
+                  v-model="email"
                 >
               </div>
 
@@ -41,6 +43,7 @@
                   type="text"
                   class="form-control"
                   placeholder="Enter full name"
+                  v-model="full_name"
                 >
               </div>
 
@@ -50,6 +53,7 @@
                   type="text"
                   class="form-control"
                   placeholder="Enter phone number"
+                  v-model="phone"
                 >
               </div>
 
@@ -59,13 +63,14 @@
                   type="number"
                   class="form-control"
                   placeholder="Enter age"
+                  v-model="age"
                 >
               </div>
 
               <div class="mb-3">
                 <label class="form-label">Gender</label>
 
-                <select class="form-select">
+                <select class="form-select" v-model="gender">
                   <option>Male</option>
                   <option>Female</option>
                   <option>Other</option>
@@ -79,6 +84,7 @@
                   class="form-control"
                   rows="3"
                   placeholder="Enter address"
+                  v-model="address"
                 ></textarea>
               </div>
 
@@ -89,6 +95,7 @@
                   type="password"
                   class="form-control"
                   placeholder="Enter password"
+                  v-model="password"
                 >
               </div>
 
@@ -99,6 +106,7 @@
                   type="password"
                   class="form-control"
                   placeholder="Confirm password"
+                  v-model="confirm_password"
                 >
               </div>
 
@@ -130,6 +138,71 @@ export default {
 
   components: {
     Navbar
+  },
+  data() {
+    return {
+        "username": "",
+        "email": "",
+        "full_name": "",
+        "phone": "",
+        "age": "",
+        "gender": "",
+        "address": "",
+        "password": "",
+        "confirm_password": ""
+    };
+  },
+  methods:{
+    async register() {
+      try {
+        console.log({
+          username: this.username,
+          email: this.email,
+          full_name: this.full_name,
+          phone: this.phone,
+          age: this.age,
+          gender: this.gender,
+          address: this.address,
+          password: this.password,
+          confirm_password: this.confirm_password
+        });
+        const response = await fetch(
+          "http://127.0.0.1:5000/register",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              username: this.username,
+              email: this.email,
+              full_name: this.full_name,
+              phone: this.phone,
+              age: this.age,
+              gender: this.gender,
+              address: this.address,
+              password: this.password,
+              confirm_password: this.confirm_password
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        console.log(data);
+
+        if (response.ok) {
+          alert(data.message);
+          this.$router.push("/login");
+        } else {
+          alert(data.message);
+        }
+
+      } catch (error) {
+        console.error(error);
+        alert("Registration failed");
+      }
+    }
   }
 }
 </script>
