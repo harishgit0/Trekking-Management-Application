@@ -5,7 +5,9 @@ from application.models import *
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager,create_access_token,jwt_required,get_jwt
 from datetime import datetime
+from datetime import date
 from flask_cors import CORS
+from flask_jwt_extended import get_jwt_identity
 
 app = Flask(__name__)
 
@@ -607,10 +609,194 @@ def get_bookings_api():
 
 # ---------------------------------------------------------------------------------------------------------
 
+# ---------------------------------------------Staff APIs----------------------------------------------------------
 
 
 
+@app.route("/staff/dashboard_counts", methods=["GET"])
+@jwt_required()
+def staff_dashboard_counts_api():
 
+    claim = get_jwt()
+    staff_id = get_jwt_identity()
+
+    if claim["role"] != "staff":
+        return jsonify({"message": "Access denied"}), 403
+
+    trek_count = StaffAssignment.query.filter_by(
+        staff_id=staff_id
+    ).count()
+    assigned_treks=StaffAssignment.query.filter_by(
+        staff_id=staff_id
+    ).all()
+
+    upcoming_count = StaffAssignment.query.join(Trek).filter(
+        StaffAssignment.staff_id == staff_id,
+        Trek.start_date > date.today()
+    ).count()
+    completed_count = StaffAssignment.query.join(Trek).filter(
+        StaffAssignment.staff_id == staff_id,
+        Trek.end_date < date.today()
+    ).count()
+
+    return jsonify({
+        "total_assigned_treks": trek_count,
+        "upcoming_treks": upcoming_count,
+        "completed_treks": completed_count,
+        "assigned_treks": [assigned_trek.to_dict() for assigned_trek in assigned_treks]
+    }), 200
+
+
+
+@app.route("/staff/get_treks", methods=["GET"])
+@jwt_required()
+def staff_get_treks_api():
+    claim = get_jwt()
+    staff_id = get_jwt_identity()
+
+    if claim["role"] != "staff":
+        return jsonify({"message": "Access denied"}), 403
+
+    treks = Trek.query.join(StaffAssignment).filter(
+        StaffAssignment.staff_id == staff_id
+    ).all()
+
+    return jsonify({"treks": [trek.to_dict() for trek in treks]}), 200
+
+@app.route("/staff/update_trek/<int:trek_id>", methods=["PUT"])
+@jwt_required()
+def staff_update_trek_api(trek_id):
+
+    claims = get_jwt()
+    staff_id = get_jwt_identity()
+
+    if claims["role"] != "staff":
+        return jsonify({
+            "message": "Access denied"
+        }), 403
+
+    assignment = StaffAssignment.query.filter_by(
+        staff_id=staff_id,
+        trek_id=trek_id
+    ).first()
+
+    if not assignment:
+        return jsonify({
+            "message": "You are not assigned to this trek"
+        }), 403
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({
+            "message": "Trek not found"
+        }), 404
+
+    data = request.get_json()
+
+    available_slots = data.get("available_slots")
+    status = data.get("status")
+
+    # Validate slots
+    if available_slots is not None:
+
+        if available_slots < 0:
+            return jsonify({
+                "message": "Available slots cannot be negative"
+            }), 400
+
+        if available_slots > trek.total_slots:
+            return jsonify({
+                "message": "Available slots cannot exceed total slots"
+            }), 400
+
+        trek.available_slots = available_slots
+
+    # Validate status
+    allowed_statuses = [
+        "Pending",
+        "Started",
+        "Completed"
+    ]
+
+    if status is not None:
+
+        if status not in allowed_statuses:
+            return jsonify({
+                "message": "Invalid status"
+            }), 400
+
+        trek.status = status
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Trek updated successfully",
+        "trek": trek.to_dict()
+    }), 200
+
+@app.route("/staff/participants/<int:trek_id>", methods=["GET"])
+@jwt_required()
+def staff_get_participants_api(trek_id):
+
+    claims = get_jwt()
+    staff_id = get_jwt_identity()
+
+    if claims["role"] != "staff":
+        return jsonify({
+            "message": "Access denied"
+        }), 403
+
+    # Check staff is assigned to this trek
+    assignment = StaffAssignment.query.filter_by(
+        staff_id=staff_id,
+        trek_id=trek_id
+    ).first()
+
+    if not assignment:
+        return jsonify({
+            "message": "You are not assigned to this trek"
+        }), 403
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({
+            "message": "Trek not found"
+        }), 404
+
+    participants = Booking.query.filter_by(
+        trek_id=trek_id
+    ).all()
+
+    return jsonify({
+        "trek": trek.to_dict(),
+        "participants": [participant.to_dict() for participant in participants]
+    }), 200
+
+@app.route("/staff/profile", methods=["GET"])
+@jwt_required()
+def staff_profile_api():
+    claims = get_jwt()
+    staff_id = get_jwt_identity()
+
+    if claims["role"] != "staff":
+        return jsonify({
+            "message": "Access denied"
+        }), 403
+
+    staff = User.query.get(staff_id)
+
+    if not staff:
+        return jsonify({
+            "message": "Staff not found"
+        }), 404
+
+    return jsonify({
+        "staff": staff.to_dict()
+    }), 200
+
+# --------------------------------------------------------------------------------------------------------------------
 with app.app_context():
     db.create_all()
     admin = User.query.filter_by(role="admin").first()

@@ -102,6 +102,9 @@ export default {
     if(response.data.user.role === "admin"){
       this.$router.push("/admin")
     }
+    if(response.data.user.role === "staff"){
+      this.$router.push("/staff")
+    }
 
   }
   catch(error) {

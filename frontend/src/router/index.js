@@ -13,6 +13,12 @@ import AdminAddStaff from "../views/AdminAddStaff.vue"
 import AdminEditStaff from "../views/AdminEditStaff.vue"
 import AdminAssignTrek from "../views/AdminAssignTrek.vue"
 import AdminBooking from "../views/AdminBooking.vue"
+import StaffDashboard from "../views/StaffDashboard.vue"
+import StaffAssignTrek from "../views/StaffAssignTrek.vue"
+import StaffPart from "../views/StaffPart.vue"
+import StaffProfile from "../views/StaffProfile.vue"
+
+
 const routes=[
     {
         path :"/",component:HomeView
@@ -55,6 +61,18 @@ const routes=[
     },
     {
         path :"/admin/booking",component:AdminBooking
+    },
+    {
+        path :"/staff",component:StaffDashboard
+    },
+    {
+        path :"/staff/assign-trek",component:StaffAssignTrek
+    },
+    {
+        path :"/staff/participants/:id",component:StaffPart
+    },
+    {
+        path :"/staff/profile",component:StaffProfile
     }
 ]
 

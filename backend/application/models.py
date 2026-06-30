@@ -23,8 +23,12 @@ class User(db.Model):
             "email": self.email,
             "role": self.role,
             "active_status": self.active_status,
+
             "full_name": self.profile.full_name if self.profile else "",
-            "phone": self.profile.phone if self.profile else ""
+            "phone": self.profile.phone if self.profile else "",
+            "age": self.profile.age if self.profile else None,
+            "gender": self.profile.gender if self.profile else "",
+            "address": self.profile.address if self.profile else ""
         }
 
 class UserProfile(db.Model):
@@ -99,7 +103,10 @@ class Booking(db.Model):
             "user_name": self.user.username if self.user else None,
             "trek_name": self.trek.trek_name if self.trek else None,
             "booking_date": self.booking_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "status": self.booking_status
+            "booking_status": self.booking_status,
+            "email": self.user.email if self.user else None,
+            "username": self.user.username if self.user else None
+
         }
 
 
@@ -109,6 +116,14 @@ class StaffAssignment(db.Model):
     staff_id=db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     trek_id=db.Column(db.Integer, db.ForeignKey('trek.id'), nullable=False)
     assigned_at=db.Column(db.DateTime, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "staff_id": self.staff_id,
+            "trek_id": self.trek_id,
+            "assigned_at": self.assigned_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
     __table_args__ = (
     db.UniqueConstraint(
