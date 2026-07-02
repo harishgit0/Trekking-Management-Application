@@ -797,6 +797,195 @@ def staff_profile_api():
     }), 200
 
 # --------------------------------------------------------------------------------------------------------------------
+
+
+
+# --------------------------------------------------USER(TREKKER_APIs)-----------------------------
+
+
+
+@app.route("/trekker/stats", methods=["GET"])
+@jwt_required()
+def trekker_stats_api():
+    claims = get_jwt()
+
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
+
+    user_id = get_jwt_identity()
+
+    # Available treks
+    available_treks = Trek.query.filter(
+        Trek.available_slots > 0,
+        Trek.start_date >= date.today(),
+        Trek.status == "Approved"
+    ).count()
+
+    # Total bookings by this user
+    booked_treks = Booking.query.filter_by(
+        user_id=user_id
+    ).count()
+
+    # Upcoming booked treks
+    upcoming_treks = Booking.query.join(Trek).filter(
+        Booking.user_id == user_id,
+        Trek.start_date > date.today()
+    ).count()
+
+    # Completed booked treks
+    completed_treks = Booking.query.join(Trek).filter(
+        Booking.user_id == user_id,
+        Trek.end_date < date.today()
+    ).count()
+
+    return jsonify({
+        "available_treks": available_treks,
+        "booked_treks": booked_treks,
+        "upcoming_treks": upcoming_treks,
+        "completed_treks": completed_treks
+    }), 200
+
+
+@app.route("/trekker/treks", methods=["GET"])
+@jwt_required()
+def trekker_treks_api():
+    claims = get_jwt()
+
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
+
+    treks = Trek.query.filter(
+        Trek.available_slots > 0,
+        Trek.start_date >= date.today(),
+        Trek.status == "Approved"
+    ).all()
+
+    return jsonify({
+        "treks": [trek.to_dict() for trek in treks]
+    }), 200
+
+
+@app.route("/trekker/my_bookings", methods=["GET"])
+@jwt_required()
+def trekker_my_bookings_api():
+    claims = get_jwt()
+
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
+
+    user_id = get_jwt_identity()
+
+    bookings = Booking.query.filter_by(
+        user_id=user_id
+    ).all()
+
+    return jsonify({
+        "bookings": [booking.to_dict() for booking in bookings]
+    }), 200
+
+from datetime import datetime
+
+@app.route("/trekker/book/<int:trek_id>", methods=["POST"])
+@jwt_required()
+def trekker_book_trek_api(trek_id):
+    claims = get_jwt()
+
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
+
+    user_id = get_jwt_identity()
+
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({
+            "message": "Trek not found"
+        }), 404
+
+    # Trek must be approved
+    if trek.status != "Approved":
+        return jsonify({
+            "message": "This trek is not available for booking."
+        }), 400
+
+    # Slots available?
+    if trek.available_slots <= 0:
+        return jsonify({
+            "message": "No slots available."
+        }), 400
+
+    # Prevent duplicate booking
+    existing_booking = Booking.query.filter_by(
+        user_id=user_id,
+        trek_id=trek_id
+    ).first()
+
+    if existing_booking:
+        return jsonify({
+            "message": "You have already booked this trek."
+        }), 400
+
+    booking = Booking(
+        user_id=user_id,
+        trek_id=trek_id,
+        booking_date=datetime.now(),
+        booking_status="Booked"
+    )
+
+    # Reduce available slots
+    trek.available_slots -= 1
+
+    db.session.add(booking)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Trek booked successfully.",
+        "booking": booking.to_dict()
+    }), 201
+
+@app.route("/trekker/history", methods=["GET"])
+@jwt_required()
+def trekker_history_api():
+    claims = get_jwt()
+
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
+
+    user_id = get_jwt_identity()
+
+    bookings = Booking.query.join(Trek).filter(
+        Booking.user_id == user_id,
+        Trek.end_date < date.today()
+    ).all()
+
+
+    return jsonify({
+        "history": [booking.to_dict() for booking in bookings]
+    }), 200
+
+@app.route("/trekker/profile", methods=["GET"])
+@jwt_required()
+def trekker_profile_api():
+    claims = get_jwt()
+    trekker_id = get_jwt_identity()
+
+    if claims["role"] != "trekker":
+        return jsonify({
+            "message": "Access denied"
+        }), 403
+
+    trekker = User.query.get(trekker_id)
+
+    if not trekker:
+        return jsonify({
+            "message": "Trekker not found"
+        }), 404
+
+    return jsonify({
+        "trekker": trekker.to_dict()
+    }), 200
+
+
 with app.app_context():
     db.create_all()
     admin = User.query.filter_by(role="admin").first()

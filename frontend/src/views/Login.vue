@@ -105,6 +105,9 @@ export default {
     if(response.data.user.role === "staff"){
       this.$router.push("/staff")
     }
+    if(response.data.user.role === "trekker"){
+      this.$router.push("/trekker")
+    }
 
   }
   catch(error) {

@@ -23,10 +23,9 @@ class User(db.Model):
             "email": self.email,
             "role": self.role,
             "active_status": self.active_status,
-
             "full_name": self.profile.full_name if self.profile else "",
             "phone": self.profile.phone if self.profile else "",
-            "age": self.profile.age if self.profile else None,
+            "age": self.profile.age if self.profile else "",
             "gender": self.profile.gender if self.profile else "",
             "address": self.profile.address if self.profile else ""
         }
@@ -100,13 +99,19 @@ class Booking(db.Model):
             "id": self.id,
             "user_id": self.user_id,
             "trek_id": self.trek_id,
-            "user_name": self.user.username if self.user else None,
-            "trek_name": self.trek.trek_name if self.trek else None,
-            "booking_date": self.booking_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "booking_status": self.booking_status,
-            "email": self.user.email if self.user else None,
-            "username": self.user.username if self.user else None
 
+            "username": self.user.username if self.user else None,
+            "email": self.user.email if self.user else None,
+
+            "trek_name": self.trek.trek_name if self.trek else None,
+            "location": self.trek.location if self.trek else None,
+            "difficulty": self.trek.difficulty if self.trek else None,
+
+            "start_date": str(self.trek.start_date) if self.trek else None,
+            "end_date": str(self.trek.end_date) if self.trek else None,
+
+            "booking_date": self.booking_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "booking_status": self.booking_status
         }
 
 

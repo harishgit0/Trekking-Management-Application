@@ -17,6 +17,13 @@ import StaffDashboard from "../views/StaffDashboard.vue"
 import StaffAssignTrek from "../views/StaffAssignTrek.vue"
 import StaffPart from "../views/StaffPart.vue"
 import StaffProfile from "../views/StaffProfile.vue"
+import TrekkerDashboard from "../views/TrekkerDashboard.vue"
+import TrekkerTreks from "../views/TrekkerTreks.vue"
+import TrekkerMybooking from "../views/TrekkerMybooking.vue"
+import TrekkerHistory from "../views/TrekkerHistory.vue"
+import TrekkerProfile from "../views/TrekkerProfile.vue"
+
+
 
 
 const routes=[
@@ -73,6 +80,21 @@ const routes=[
     },
     {
         path :"/staff/profile",component:StaffProfile
+    },
+    {
+        path :"/trekker",component:TrekkerDashboard
+    },
+    {
+        path :"/trekker/treks",component:TrekkerTreks
+    },
+    {
+        path :"/trekker/bookings",component:TrekkerMybooking
+    },
+    {
+        path :"/trekker/history",component:TrekkerHistory
+    },
+    {
+        path :"/trekker/profile",component:TrekkerProfile
     }
 ]
 
