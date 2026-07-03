@@ -808,6 +808,7 @@ def staff_profile_api():
 @jwt_required()
 def trekker_stats_api():
     claims = get_jwt()
+    
 
     if claims["role"] != "trekker":
         return jsonify({"message": "Access denied"}), 403
