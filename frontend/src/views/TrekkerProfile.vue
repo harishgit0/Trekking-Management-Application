@@ -117,13 +117,6 @@
 
           <div class="card-footer text-end">
 
-            <button
-              class="btn btn-primary"
-              @click="editProfile"
-            >
-              Edit Profile
-            </button>
-
           </div>
 
         </div>
@@ -170,10 +163,6 @@ export default {
         console.log(error);
       }
 
-    },
-
-    editProfile() {
-      this.$router.push("/trekker/profile/edit");
     }
 
   },

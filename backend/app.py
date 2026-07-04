@@ -563,6 +563,8 @@ def assign_staff_api():
     if staff.role != "staff":
         return jsonify({"message": "User is not staff"}), 400
 
+    if trek.status == False:
+        return jsonify({"message": "Trek is inactive"}), 400
     existing_assignment = StaffAssignment.query.filter_by(
         trek_id=trek_id,
         staff_id=staff_id
