@@ -1,195 +1,256 @@
 from flask import Flask, request, jsonify
-from application.config import Config
+
+from application import create_app
 from application.database import db
 from application.models import *
 from application.cache import cache
+
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import JWTManager,create_access_token,jwt_required,get_jwt
-from datetime import datetime
-from datetime import date
-from flask_cors import CORS
-from flask_jwt_extended import get_jwt_identity
+
+from flask_jwt_extended import (
+    create_access_token,
+    jwt_required,
+    get_jwt,
+    get_jwt_identity,
+)
+
+from datetime import datetime, date
+
+from application.tasks import (
+    test_task,
+    export_booking_history,
+)
+
+# -----------------------------------------------------------------------------
+# App Initialization
+# -----------------------------------------------------------------------------
+
+app = create_app()
+
+# -----------------------------------------------------------------------------
+# Authentication APIs
+# -----------------------------------------------------------------------------
 
 
-app = Flask(__name__)
+@app.route("/trekker/export_bookings", methods=["POST"])
+@jwt_required()
+def export_bookings_api():
 
-CORS(app)
+    claims = get_jwt()
 
-app.config.from_object(Config)
-db.init_app(app)
-cache.init_app(app)
+    if claims["role"] != "trekker":
+        return jsonify({"message": "Access denied"}), 403
 
-jwt = JWTManager(app)
+    user_id = get_jwt_identity()
+
+    task = export_booking_history.delay(user_id)
+
+    return jsonify(
+        {
+            "message": "Export started",
+            "task_id": task.id,
+        }
+    ), 202
 
 
-# ---------------------------APIs Construction------------------------------------
-
-@app.route("/register",methods=["POST"])
+@app.route("/register", methods=["POST"])
 def register_api():
-    data=request.get_json()
-    username=data.get("username")
-    email=data.get("email")
-    password=data.get("password")
-    full_name=data.get("full_name")
-    phone=data.get("phone")
-    age=data.get("age")
-    gender=data.get("gender")
-    address=data.get("address")
 
+    data = request.get_json()
 
-    if not username or not email or not password:
-        return jsonify({"message":"All fields are required"}),400
-    
-    existing_user = User.query.filter_by(username=username).first()
-
-    if existing_user:
-        return jsonify({
-            "message":"Username already exists"
-        }),400
-    
-    existing_email = User.query.filter_by(email=email).first()
-
-    if existing_email:
-        return jsonify({
-            "message":"Email already exists"
-        }),400
-    
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
     confirm_password = data.get("confirm_password")
 
-    if password != confirm_password:
-        return jsonify({
-            "message": "Passwords do not match"
-        }), 400
-    hashed_password = generate_password_hash(password)
-    
+    full_name = data.get("full_name")
+    phone = data.get("phone")
+    age = data.get("age")
+    gender = data.get("gender")
+    address = data.get("address")
 
-    if not all([full_name,phone,age,gender,address]):
-        return jsonify({
-            "message":"All fields are required for profile"
-        }),400
-    
-    user=User(username=username,email=email,password=hashed_password,role="trekker")
+    if not username or not email or not password:
+        return jsonify({"message": "All fields are required"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"message": "Username already exists"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": "Email already exists"}), 400
+
+    if password != confirm_password:
+        return jsonify({"message": "Passwords do not match"}), 400
+
+    if not all([full_name, phone, age, gender, address]):
+        return jsonify({"message": "All profile fields are required"}), 400
+
+    hashed_password = generate_password_hash(password)
+
+    user = User(
+        username=username,
+        email=email,
+        password=hashed_password,
+        role="trekker",
+    )
+
     db.session.add(user)
-    db.session.flush()  # gets user.id without committing
-    
-    user_profile=UserProfile(user_id=user.id,full_name=full_name,phone=phone,age=age,gender=gender,address=address)
-    db.session.add(user_profile)
+    db.session.flush()
+
+    profile = UserProfile(
+        user_id=user.id,
+        full_name=full_name,
+        phone=phone,
+        age=age,
+        gender=gender,
+        address=address,
+    )
+
+    db.session.add(profile)
     db.session.commit()
 
-
-    
-    return jsonify({"message":"User registered successfully"}),201
+    return jsonify({"message": "User registered successfully"}), 201
 
 
-
-
-@app.route("/login",methods=["POST"])
+@app.route("/login", methods=["POST"])
 def login_api():
-    data= request.get_json()
+
+    data = request.get_json()
 
     if not data:
-        return jsonify({
-            "message":"No data provided"
-    }),400
-    username=data.get("username")
-    password=data.get("password")
+        return jsonify({"message": "No data provided"}), 400
+
+    username = data.get("username")
+    password = data.get("password")
 
     if not username or not password:
-        return jsonify({"message":"All fields are required"}),400
+        return jsonify({"message": "All fields are required"}), 400
 
     user = User.query.filter_by(username=username).first()
 
     if not user:
-        return jsonify({"message":"User not found"}),404
+        return jsonify({"message": "User not found"}), 404
 
-    if not check_password_hash(user.password,password):
-        return jsonify({"message":"Invalid password"}),401
-    
+    if not check_password_hash(user.password, password):
+        return jsonify({"message": "Invalid password"}), 401
+
     if not user.active_status:
-        return jsonify({
-            "message": "Your account has been blocked"
-        }), 403
-    
+        return jsonify({"message": "Your account has been blocked"}), 403
 
-    access_token = create_access_token(identity=str(user.id),additional_claims={"role": user.role})
+    access_token = create_access_token(
+        identity=str(user.id),
+        additional_claims={"role": user.role},
+    )
 
-    return jsonify({"message":"Login successful",
-                    "token":access_token,
-                    "user":{
-                    "username":user.username,
-                    "email":user.email,
-                    "role":user.role}}),200
+    return jsonify(
+        {
+            "message": "Login successful",
+            "token": access_token,
+            "user": {
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+            },
+        }
+    ), 200
 
 
-@app.route("/logout",methods=["POST"])
+@app.route("/logout", methods=["POST"])
 @jwt_required()
 def logout_api():
-    return jsonify({"message":"Logout successful"}),200
+    return jsonify({"message": "Logout successful"}), 200
 
 
+# -----------------------------------------------------------------------------
+# Admin APIs
+# -----------------------------------------------------------------------------
 # -----------------------------------------------Admin APIs-----------------------------------------------------
 
-@app.route("/admin/create_trek",methods=["POST"])
+# -----------------------------------------------------------------------------
+# Trek Management APIs
+# -----------------------------------------------------------------------------
+
+@app.route("/admin/create_trek", methods=["POST"])
 @jwt_required()
 def create_trek_api():
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    data=request.get_json()
+
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
 
     if not data:
-        return jsonify({"message":"No data provided"}),400
-    
-    trek_name=data.get("trek_name")
-    location=data.get("location")
-    description=data.get("description")
-    difficulty=data.get("difficulty")
-    duration_days=int(data.get("duration_days"))
-    total_slots=int(data.get("total_slots"))
+        return jsonify({"message": "No data provided"}), 400
+
+    trek_name = data.get("trek_name")
+    location = data.get("location")
+    description = data.get("description")
+    difficulty = data.get("difficulty")
+    duration_days = int(data.get("duration_days"))
+    total_slots = int(data.get("total_slots"))
     start_date = data.get("start_date")
     end_date = data.get("end_date")
 
+    if not all([
+        trek_name,
+        location,
+        description,
+        difficulty,
+        duration_days,
+        total_slots,
+        start_date,
+        end_date,
+    ]):
+        return jsonify({"message": "All fields are required"}), 400
 
-    if not trek_name or not location or not description or not difficulty or not duration_days or not total_slots or not start_date or not end_date:
-        return jsonify({"message":"All fields are required"}),400
-    
-    start_date = datetime.strptime(data.get("start_date"),"%d-%m-%Y").date()
+    start_date = datetime.strptime(start_date, "%d-%m-%Y").date()
+    end_date = datetime.strptime(end_date, "%d-%m-%Y").date()
 
-    end_date = datetime.strptime(data.get("end_date"),"%d-%m-%Y").date()
-
-    
     if start_date > end_date:
         return jsonify({
-            "message":"Start date cannot be after end date"
-        }),400
+            "message": "Start date cannot be after end date"
+        }), 400
+
     if duration_days <= 0:
         return jsonify({
-            "message":"Duration must be greater than 0"
-        }),400
+            "message": "Duration must be greater than 0"
+        }), 400
 
     if total_slots <= 0:
         return jsonify({
-            "message":"Total slots must be greater than 0"
-        }),400
+            "message": "Total slots must be greater than 0"
+        }), 400
 
-    available_slots=total_slots
+    trek = Trek(
+        trek_name=trek_name,
+        location=location,
+        description=description,
+        difficulty=difficulty,
+        duration_days=duration_days,
+        total_slots=total_slots,
+        available_slots=total_slots,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
-    trek=Trek(trek_name=trek_name,location=location,description=description,difficulty=difficulty,duration_days=duration_days,total_slots=total_slots,available_slots=available_slots,start_date=start_date,end_date=end_date)
     db.session.add(trek)
     db.session.commit()
     cache.clear()
 
-    return jsonify({"message":"Trek created successfully","trek_id":trek.id}),201
+    return jsonify({
+        "message": "Trek created successfully",
+        "trek_id": trek.id,
+    }), 201
 
 
 @app.route("/admin/get_trek/<int:trek_id>", methods=["GET"])
 @jwt_required()
 def get_trek_api(trek_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     trek = Trek.query.get(trek_id)
@@ -199,62 +260,72 @@ def get_trek_api(trek_id):
 
     return jsonify(trek.to_dict()), 200
 
-@app.route("/admin/dashboard_counts",methods=["GET"])
+
+@app.route("/admin/dashboard_counts", methods=["GET"])
 @jwt_required()
 @cache.cached(timeout=300)
 def dashboard_counts_api():
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    trek_count=Trek.query.count()
-    trekker_count=User.query.filter_by(role="trekker").count()
-    staff_count=User.query.filter_by(role="staff").count()
-    booking_count=Booking.query.count()
 
-    return jsonify({"trek_count":trek_count,"trekker_count":trekker_count,"staff_count":staff_count,"booking_count":booking_count}),200
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    return jsonify({
+        "trek_count": Trek.query.count(),
+        "trekker_count": User.query.filter_by(role="trekker").count(),
+        "staff_count": User.query.filter_by(role="staff").count(),
+        "booking_count": Booking.query.count(),
+    }), 200
 
 
-
-@app.route("/admin/get_treks",methods=["GET"])
+@app.route("/admin/get_treks", methods=["GET"])
 @jwt_required()
 @cache.cached(timeout=300)
 def get_treks_api():
-    print("🔥 DATABASE HIT")
 
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    treks=Trek.query.all()
+    claims = get_jwt()
 
-    return jsonify({"treks":[trek.to_dict() for trek in treks]}),200
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
 
-@app.route("/admin/delete_trek/<int:trek_id>",methods=["DELETE"])
+    treks = Trek.query.all()
+
+    return jsonify({
+        "treks": [trek.to_dict() for trek in treks]
+    }), 200
+
+
+@app.route("/admin/delete_trek/<int:trek_id>", methods=["DELETE"])
 @jwt_required()
 def delete_trek_api(trek_id):
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    trek=Trek.query.get(trek_id)
+
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    trek = Trek.query.get(trek_id)
 
     if not trek:
-        return jsonify({"message":"Trek not found"}),404
+        return jsonify({"message": "Trek not found"}), 404
 
     db.session.delete(trek)
     db.session.commit()
     cache.clear()
 
-    return jsonify({"message":"Trek deleted successfully"}),200
+    return jsonify({
+        "message": "Trek deleted successfully"
+    }), 200
+
 
 @app.route("/admin/update_trek/<int:trek_id>", methods=["PUT"])
 @jwt_required()
 def update_trek_api(trek_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     trek = Trek.query.get(trek_id)
@@ -279,27 +350,34 @@ def update_trek_api(trek_id):
     return jsonify({
         "message": "Trek updated successfully"
     }), 200
+# -----------------------------------------------------------------------------
+# Trekker Management APIs
+# -----------------------------------------------------------------------------
 
-@app.route("/admin/trekkers",methods=["GET"])
+@app.route("/admin/trekkers", methods=["GET"])
 @jwt_required()
 @cache.cached(timeout=300)
 def get_trekkers_api():
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    trekkers=User.query.filter_by(role="trekker").all()
 
-    return jsonify({"trekkers":[trekker.to_dict() for trekker in trekkers]}),200
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    trekkers = User.query.filter_by(role="trekker").all()
+
+    return jsonify({
+        "trekkers": [trekker.to_dict() for trekker in trekkers]
+    }), 200
 
 
 @app.route("/admin/get_trekker/<int:trekker_id>", methods=["GET"])
 @jwt_required()
 def get_trekker_api(trekker_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     trekker = User.query.get(trekker_id)
@@ -316,7 +394,7 @@ def get_trekker_api(trekker_id):
         "phone": trekker.profile.phone if trekker.profile else "",
         "age": trekker.profile.age if trekker.profile else "",
         "gender": trekker.profile.gender if trekker.profile else "",
-        "address": trekker.profile.address if trekker.profile else ""
+        "address": trekker.profile.address if trekker.profile else "",
     }), 200
 
 
@@ -324,9 +402,9 @@ def get_trekker_api(trekker_id):
 @jwt_required()
 def update_trekker_api(trekker_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     trekker = User.query.get(trekker_id)
@@ -347,7 +425,6 @@ def update_trekker_api(trekker_id):
         trekker.profile.gender = data.get("gender")
         trekker.profile.address = data.get("address")
 
-
     db.session.commit()
     cache.clear()
 
@@ -355,40 +432,73 @@ def update_trekker_api(trekker_id):
         "message": "Trekker updated successfully"
     }), 200
 
+
+@app.route("/admin/block_user/<int:user_id>", methods=["PUT"])
+@jwt_required()
+def block_user_api(user_id):
+
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    if user.role != "trekker":
+        return jsonify({"message": "User is not trekker"}), 400
+
+    user.active_status = False
+
+    db.session.commit()
+    cache.clear()
+
+    return jsonify({
+        "message": "User blocked successfully"
+    }), 200
+
+
+# -----------------------------------------------------------------------------
+# Staff Management APIs
+# -----------------------------------------------------------------------------
+
 @app.route("/admin/staff", methods=["GET"])
 @jwt_required()
 @cache.cached(timeout=300)
 def staff_api():
 
-    claim = get_jwt()
-    if claim["role"] != "admin":
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     staff_list = User.query.filter_by(role="staff").all()
 
     result = []
 
-    for s in staff_list:
+    for staff in staff_list:
         result.append({
-            "id": s.id,
-            "username": s.username,
-            "email": s.email,
-            "active_status": s.active_status,
-
-            "full_name": s.profile.full_name if s.profile else "",
-            "phone": s.profile.phone if s.profile else "",
-
-            "assigned_treks": len(s.staff_assignments) if s.staff_assignments else 0
+            "id": staff.id,
+            "username": staff.username,
+            "email": staff.email,
+            "active_status": staff.active_status,
+            "full_name": staff.profile.full_name if staff.profile else "",
+            "phone": staff.profile.phone if staff.profile else "",
+            "assigned_treks": len(staff.staff_assignments)
         })
 
     return jsonify({"staff": result}), 200
+
+
 @app.route("/admin/get_staff/<int:staff_id>", methods=["GET"])
 @jwt_required()
 def get_staff_api(staff_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     staff = User.query.get(staff_id)
@@ -405,16 +515,17 @@ def get_staff_api(staff_id):
         "phone": staff.profile.phone if staff.profile else "",
         "age": staff.profile.age if staff.profile else "",
         "gender": staff.profile.gender if staff.profile else "",
-        "address": staff.profile.address if staff.profile else ""
+        "address": staff.profile.address if staff.profile else "",
     }), 200
+
 
 @app.route("/admin/update_staff/<int:staff_id>", methods=["PUT"])
 @jwt_required()
 def update_staff_api(staff_id):
 
-    claim = get_jwt()
+    claims = get_jwt()
 
-    if claim["role"] != "admin":
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     staff = User.query.get(staff_id)
@@ -441,120 +552,121 @@ def update_staff_api(staff_id):
     return jsonify({
         "message": "Staff updated successfully"
     }), 200
+# -----------------------------------------------------------------------------
+# Staff Creation & Assignment APIs
+# -----------------------------------------------------------------------------
 
-@app.route("/admin/add_staff",methods=["POST"])
+@app.route("/admin/add_staff", methods=["POST"])
 @jwt_required()
 def add_staff_api():
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    data=request.get_json()
+
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
 
     if not data:
-        return jsonify({"message":"No data provided"}),400
-    
-    username=data.get("username")
-    email=data.get("email")
-    password=data.get("password")
-    full_name=data.get("full_name")
-    phone=data.get("phone")
-    age=data.get("age")
-    gender=data.get("gender")
-    address=data.get("address")
+        return jsonify({"message": "No data provided"}), 400
+
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    full_name = data.get("full_name")
+    phone = data.get("phone")
+    age = data.get("age")
+    gender = data.get("gender")
+    address = data.get("address")
 
     if not username or not email or not password:
         return jsonify({
-            "message":"Username, email and password are required"
-        }),400
-    
-    existing_user = User.query.filter_by(username=username).first()
+            "message": "Username, email and password are required"
+        }), 400
 
-    if existing_user:
+    if User.query.filter_by(username=username).first():
         return jsonify({
-            "message":"Username already exists"
-        }),400
-    
-    existing_email = User.query.filter_by(email=email).first()
+            "message": "Username already exists"
+        }), 400
 
-    if existing_email:
+    if User.query.filter_by(email=email).first():
         return jsonify({
-            "message":"Email already exists"
-        }),400
-    
+            "message": "Email already exists"
+        }), 400
+
+    if not all([full_name, phone, age, gender, address]):
+        return jsonify({
+            "message": "All profile fields are required"
+        }), 400
+
     hashed_password = generate_password_hash(password)
-    
 
-    if not all([full_name,phone,age,gender,address]):
-        return jsonify({
-            "message":"All fields are required for profile"
-        }),400
-    
-    user=User(username=username,email=email,password=hashed_password,role="staff")
-    db.session.add(user)
-    db.session.flush()  # gets user.id without committing
-    
-    user_profile=UserProfile(user_id=user.id,full_name=full_name,phone=phone,age=age,gender=gender,address=address)
-    db.session.add(user_profile)
+    staff = User(
+        username=username,
+        email=email,
+        password=hashed_password,
+        role="staff",
+    )
+
+    db.session.add(staff)
+    db.session.flush()
+
+    profile = UserProfile(
+        user_id=staff.id,
+        full_name=full_name,
+        phone=phone,
+        age=age,
+        gender=gender,
+        address=address,
+    )
+
+    db.session.add(profile)
     db.session.commit()
+
     cache.clear()
 
-    return jsonify({"message":"Staff added successfully",
-                    "staff_id":user.id,
-                    "staff_username":user.username}),201
+    return jsonify({
+        "message": "Staff added successfully",
+        "staff_id": staff.id,
+        "staff_username": staff.username,
+    }), 201
 
 
-
-@app.route("/admin/block_staff/<int:staff_id>",methods=["PUT"])
+@app.route("/admin/block_staff/<int:staff_id>", methods=["PUT"])
 @jwt_required()
 def block_staff_api(staff_id):
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    staff=User.query.get(staff_id)
+
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
+
+    staff = User.query.get(staff_id)
 
     if not staff:
-        return jsonify({"message":"Staff not found"}),404
-    
+        return jsonify({"message": "Staff not found"}), 404
+
     if staff.role != "staff":
-        return jsonify({"message":"User is not staff"}),400
-    
+        return jsonify({"message": "User is not staff"}), 400
 
-    staff.active_status=False
+    staff.active_status = False
+
     db.session.commit()
     cache.clear()
 
-    return jsonify({"message":"Staff blocked successfully"}),200
-
-@app.route("/admin/block_user/<int:user_id>",methods=["PUT"])
-@jwt_required()
-def block_user_api(user_id):
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    user=User.query.get(user_id)
-
-    if not user:
-        return jsonify({"message":"User not found"}),404
-    
-    if user.role != "trekker":
-        return jsonify({"message":"User is not trekker"}),400
-
-    user.active_status=False
-    db.session.commit()
-    cache.clear()
-
-    return jsonify({"message":"User blocked successfully"}),200
+    return jsonify({
+        "message": "Staff blocked successfully"
+    }), 200
 
 
 @app.route("/admin/assign_staff", methods=["POST"])
 @jwt_required()
 def assign_staff_api():
-    claim = get_jwt()
 
-    if claim["role"] != "admin":
+    claims = get_jwt()
+
+    if claims["role"] != "admin":
         return jsonify({"message": "Access denied"}), 403
 
     data = request.get_json()
@@ -583,11 +695,14 @@ def assign_staff_api():
     if staff.role != "staff":
         return jsonify({"message": "User is not staff"}), 400
 
-    if trek.status == False:
-        return jsonify({"message": "Trek is inactive"}), 400
+    if trek.status is False:
+        return jsonify({
+            "message": "Trek is inactive"
+        }), 400
+
     existing_assignment = StaffAssignment.query.filter_by(
         trek_id=trek_id,
-        staff_id=staff_id
+        staff_id=staff_id,
     ).first()
 
     if existing_assignment:
@@ -595,20 +710,24 @@ def assign_staff_api():
             "message": "Staff already assigned to this trek"
         }), 400
 
-
-    existing_trek_assignment = StaffAssignment.query.filter_by(
+    trek_assignment = StaffAssignment.query.filter_by(
         trek_id=trek_id
     ).first()
-    
-    if existing_trek_assignment:
+
+    if trek_assignment:
         return jsonify({
             "message": "A staff member is already assigned to this trek"
         }), 400
 
-    staff_assignment = StaffAssignment(staff_id=staff_id,trek_id=trek_id,assigned_at=datetime.utcnow())
+    assignment = StaffAssignment(
+        staff_id=staff_id,
+        trek_id=trek_id,
+        assigned_at=datetime.utcnow(),
+    )
 
-    db.session.add(staff_assignment)
+    db.session.add(assignment)
     db.session.commit()
+
     cache.clear()
 
     return jsonify({
@@ -616,21 +735,21 @@ def assign_staff_api():
     }), 201
 
 
-
-
-@app.route("/admin/get_bookings",methods=["GET"])
+@app.route("/admin/get_bookings", methods=["GET"])
 @jwt_required()
 @cache.cached(timeout=300)
 def get_bookings_api():
-    claim=get_jwt()
-    if claim["role"]!="admin":
-        return jsonify({"message":"Access denied"}),403
-    
-    bookings=Booking.query.all()
 
-    return jsonify({"bookings":[booking.to_dict() for booking in bookings]}),200
+    claims = get_jwt()
 
+    if claims["role"] != "admin":
+        return jsonify({"message": "Access denied"}), 403
 
+    bookings = Booking.query.all()
+
+    return jsonify({
+        "bookings": [booking.to_dict() for booking in bookings]
+    }), 200
 # ---------------------------------------------------------------------------------------------------------
 
 # ---------------------------------------------Staff APIs----------------------------------------------------------
@@ -912,7 +1031,7 @@ def trekker_my_bookings_api():
         "bookings": [booking.to_dict() for booking in bookings]
     }), 200
 
-from datetime import datetime
+
 
 @app.route("/trekker/book/<int:trek_id>", methods=["POST"])
 @jwt_required()
@@ -973,6 +1092,7 @@ def trekker_book_trek_api(trek_id):
         "booking": booking.to_dict()
     }), 201
 
+
 @app.route("/trekker/history", methods=["GET"])
 @jwt_required()
 def trekker_history_api():
@@ -1015,20 +1135,29 @@ def trekker_profile_api():
         "trekker": trekker.to_dict()
     }), 200
 
+# ---------------------------
+# Initial Database Setup
+# ---------------------------
 
 with app.app_context():
     db.create_all()
+
     admin = User.query.filter_by(role="admin").first()
 
     if not admin:
         admin = User(
             username="admin",
             email="admin@trek.com",
-            password=generate_password_hash("admin123"),   
+            password=generate_password_hash("admin123"),
             role="admin"
         )
         db.session.add(admin)
         db.session.commit()
+
+
+# ---------------------------
+# Testing Routes
+# ---------------------------
 
 @app.route("/test-cache")
 @cache.cached(timeout=60)
@@ -1037,5 +1166,21 @@ def test_cache():
     return jsonify({
         "message": "Cache is working!"
     })
+
+
+@app.route("/test-celery")
+def test_celery():
+    task = test_task.delay()
+
+    return jsonify({
+        "message": "Task sent successfully!",
+        "task_id": task.id
+    })
+
+
+# ---------------------------
+# Run Application
+# ---------------------------
+
 if __name__ == "__main__":
     app.run(debug=True)
