@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from application.config import Config
 from application.database import db
 from application.models import *
+from application.cache import cache
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager,create_access_token,jwt_required,get_jwt
 from datetime import datetime
@@ -9,12 +10,14 @@ from datetime import date
 from flask_cors import CORS
 from flask_jwt_extended import get_jwt_identity
 
+
 app = Flask(__name__)
 
 CORS(app)
 
 app.config.from_object(Config)
 db.init_app(app)
+cache.init_app(app)
 
 jwt = JWTManager(app)
 
@@ -175,6 +178,7 @@ def create_trek_api():
     trek=Trek(trek_name=trek_name,location=location,description=description,difficulty=difficulty,duration_days=duration_days,total_slots=total_slots,available_slots=available_slots,start_date=start_date,end_date=end_date)
     db.session.add(trek)
     db.session.commit()
+    cache.clear()
 
     return jsonify({"message":"Trek created successfully","trek_id":trek.id}),201
 
@@ -197,6 +201,7 @@ def get_trek_api(trek_id):
 
 @app.route("/admin/dashboard_counts",methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def dashboard_counts_api():
     claim=get_jwt()
     if claim["role"]!="admin":
@@ -208,9 +213,15 @@ def dashboard_counts_api():
     booking_count=Booking.query.count()
 
     return jsonify({"trek_count":trek_count,"trekker_count":trekker_count,"staff_count":staff_count,"booking_count":booking_count}),200
+
+
+
 @app.route("/admin/get_treks",methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def get_treks_api():
+    print("🔥 DATABASE HIT")
+
     claim=get_jwt()
     if claim["role"]!="admin":
         return jsonify({"message":"Access denied"}),403
@@ -233,6 +244,7 @@ def delete_trek_api(trek_id):
 
     db.session.delete(trek)
     db.session.commit()
+    cache.clear()
 
     return jsonify({"message":"Trek deleted successfully"}),200
 
@@ -262,6 +274,7 @@ def update_trek_api(trek_id):
     trek.status = data.get("status")
 
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Trek updated successfully"
@@ -269,6 +282,7 @@ def update_trek_api(trek_id):
 
 @app.route("/admin/trekkers",methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def get_trekkers_api():
     claim=get_jwt()
     if claim["role"]!="admin":
@@ -335,6 +349,7 @@ def update_trekker_api(trekker_id):
 
 
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Trekker updated successfully"
@@ -342,6 +357,7 @@ def update_trekker_api(trekker_id):
 
 @app.route("/admin/staff", methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def staff_api():
 
     claim = get_jwt()
@@ -420,6 +436,7 @@ def update_staff_api(staff_id):
         staff.profile.address = data.get("address")
 
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Staff updated successfully"
@@ -480,6 +497,7 @@ def add_staff_api():
     user_profile=UserProfile(user_id=user.id,full_name=full_name,phone=phone,age=age,gender=gender,address=address)
     db.session.add(user_profile)
     db.session.commit()
+    cache.clear()
 
     return jsonify({"message":"Staff added successfully",
                     "staff_id":user.id,
@@ -505,6 +523,7 @@ def block_staff_api(staff_id):
 
     staff.active_status=False
     db.session.commit()
+    cache.clear()
 
     return jsonify({"message":"Staff blocked successfully"}),200
 
@@ -525,6 +544,7 @@ def block_user_api(user_id):
 
     user.active_status=False
     db.session.commit()
+    cache.clear()
 
     return jsonify({"message":"User blocked successfully"}),200
 
@@ -589,6 +609,7 @@ def assign_staff_api():
 
     db.session.add(staff_assignment)
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Staff assigned successfully"
@@ -599,6 +620,7 @@ def assign_staff_api():
 
 @app.route("/admin/get_bookings",methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def get_bookings_api():
     claim=get_jwt()
     if claim["role"]!="admin":
@@ -617,6 +639,7 @@ def get_bookings_api():
 
 @app.route("/staff/dashboard_counts", methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def staff_dashboard_counts_api():
 
     claim = get_jwt()
@@ -652,6 +675,7 @@ def staff_dashboard_counts_api():
 
 @app.route("/staff/get_treks", methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def staff_get_treks_api():
     claim = get_jwt()
     staff_id = get_jwt_identity()
@@ -731,6 +755,7 @@ def staff_update_trek_api(trek_id):
         trek.status = status
 
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Trek updated successfully",
@@ -851,6 +876,7 @@ def trekker_stats_api():
 
 @app.route("/trekker/treks", methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=300)
 def trekker_treks_api():
     claims = get_jwt()
 
@@ -940,6 +966,7 @@ def trekker_book_trek_api(trek_id):
 
     db.session.add(booking)
     db.session.commit()
+    cache.clear()
 
     return jsonify({
         "message": "Trek booked successfully.",
@@ -1003,5 +1030,12 @@ with app.app_context():
         db.session.add(admin)
         db.session.commit()
 
+@app.route("/test-cache")
+@cache.cached(timeout=60)
+def test_cache():
+    print("🔥 TEST ROUTE EXECUTED")
+    return jsonify({
+        "message": "Cache is working!"
+    })
 if __name__ == "__main__":
     app.run(debug=True)
