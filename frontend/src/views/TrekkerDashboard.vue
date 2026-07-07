@@ -104,18 +104,6 @@
 
         </div>
 
-        <!-- Search Bar -->
-        <div class="card shadow-sm mt-4">
-          <div class="card-body">
-            <input
-              type="text"
-              class="form-control"
-              v-model="search"
-              placeholder="Search treks..."
-            >
-          </div>
-        </div>
-
         <!-- Available Treks -->
         <div class="card shadow-sm mt-4">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -335,6 +323,9 @@ export default {
       }catch(error){
         console.log(error);
       }
+    },
+    bookTrek(id){
+      this.$router.push("/trekker/treks/")
     },
     async my_booking(){
       try{

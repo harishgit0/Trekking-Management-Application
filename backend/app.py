@@ -17,8 +17,9 @@ from flask_jwt_extended import (
 from datetime import datetime, date
 
 from application.tasks import (
-    test_task,
     export_booking_history,
+    daily_reminder_task,
+    monthly_report_task,
 )
 
 # -----------------------------------------------------------------------------
@@ -533,19 +534,41 @@ def update_staff_api(staff_id):
     if not staff:
         return jsonify({"message": "Staff not found"}), 404
 
-    data = request.get_json()
+    if staff.role != "staff":
+        return jsonify({"message": "Invalid staff ID"}), 400
 
-    staff.username = data.get("username")
-    staff.email = data.get("email")
-    staff.active_status = data.get("active_status")
+    data = request.get_json() or {}
+
+    existing_username = User.query.filter(
+        User.username == data.get("username"),
+        User.id != staff_id
+    ).first()
+
+    if existing_username:
+        return jsonify({"message": "Username already exists"}), 400
+
+    existing_email = User.query.filter(
+        User.email == data.get("email"),
+        User.id != staff_id
+    ).first()
+
+    if existing_email:
+        return jsonify({"message": "Email already exists"}), 400
+
+    staff.username = data.get("username", staff.username)
+    staff.email = data.get("email", staff.email)
+    staff.active_status = data.get("active_status", staff.active_status)
 
     if staff.profile:
-        staff.profile.full_name = data.get("full_name")
-        staff.profile.phone = data.get("phone")
-        staff.profile.age = data.get("age")
-        staff.profile.gender = data.get("gender")
-        staff.profile.address = data.get("address")
+        staff.profile.full_name = data.get("full_name", staff.profile.full_name)
+        staff.profile.phone = data.get("phone", staff.profile.phone)
+        staff.profile.age = data.get("age", staff.profile.age)
+        staff.profile.gender = data.get("gender", staff.profile.gender)
+        staff.profile.address = data.get("address", staff.profile.address)
 
+    # If staff is blacklisted, remove all assigned treks
+    if staff.active_status is False:
+        StaffAssignment.query.filter_by(staff_id=staff.id).delete()
     db.session.commit()
     cache.clear()
 
@@ -693,28 +716,35 @@ def assign_staff_api():
         return jsonify({"message": "Staff not found"}), 404
 
     if staff.role != "staff":
-        return jsonify({"message": "User is not staff"}), 400
+        return jsonify({"message": "User is not a staff member"}), 400
 
-    if trek.status is False:
+    if not staff.active_status:
         return jsonify({
-            "message": "Trek is inactive"
+            "message": "Staff is blocked"
         }), 400
 
-    existing_assignment = StaffAssignment.query.filter_by(
-        trek_id=trek_id,
-        staff_id=staff_id,
+    # Allow assignment only for Open treks
+    if trek.status != "Open":
+        return jsonify({
+            "message": "Staff can only be assigned to Open treks"
+        }), 400
+
+    # Prevent assigning the same staff to multiple treks
+    existing_staff_assignment = StaffAssignment.query.filter_by(
+        staff_id=staff_id
     ).first()
 
-    if existing_assignment:
+    if existing_staff_assignment:
         return jsonify({
-            "message": "Staff already assigned to this trek"
+            "message": "Staff is already assigned to another trek"
         }), 400
 
-    trek_assignment = StaffAssignment.query.filter_by(
+    # Prevent assigning another staff to the same trek
+    existing_trek_assignment = StaffAssignment.query.filter_by(
         trek_id=trek_id
     ).first()
 
-    if trek_assignment:
+    if existing_trek_assignment:
         return jsonify({
             "message": "A staff member is already assigned to this trek"
         }), 400
@@ -733,7 +763,6 @@ def assign_staff_api():
     return jsonify({
         "message": "Staff assigned successfully"
     }), 201
-
 
 @app.route("/admin/get_bookings", methods=["GET"])
 @jwt_required()
@@ -1167,16 +1196,7 @@ def test_cache():
         "message": "Cache is working!"
     })
 
-
-@app.route("/test-celery")
-def test_celery():
-    task = test_task.delay()
-
-    return jsonify({
-        "message": "Task sent successfully!",
-        "task_id": task.id
-    })
-
+from application.email_utils import send_email
 
 # ---------------------------
 # Run Application

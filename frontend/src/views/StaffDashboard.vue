@@ -94,7 +94,7 @@
 
       <div class="card-body">
         <router-link to="/staff/assign-trek" class="btn btn-primary me-2">
-          Assign Trek
+          Assigned Trek
         </router-link>
 
         <router-link to="/staff/profile" class="btn btn-secondary">Profile</router-link>

@@ -48,7 +48,7 @@
                     class="badge"
                     :class="statusClass(booking.status)"
                   >
-                    {{ booking.status }}
+                    {{ booking.booking_status }}
                   </span>
                 </td>
 
@@ -112,7 +112,7 @@
                 } else if (status === "Rejected") {
                     return "bg-danger";
                 } else {
-                    return "bg-warning";
+                    return "bg-success";
                 }
             },
             async fetchBookings() {

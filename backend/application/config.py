@@ -19,3 +19,14 @@ class Config:
 
     timezone = "Asia/Kolkata"
     enable_utc = True
+
+
+    MAIL_SERVER = "smtp.gmail.com"
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USE_SSL = False
+
+    MAIL_USERNAME = "harishcha456@gmail.com"
+    MAIL_PASSWORD = "hgig tjis aplw ppcm"
+
+    MAIL_DEFAULT_SENDER = "your_email@gmail.com"

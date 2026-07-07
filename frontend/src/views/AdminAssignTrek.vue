@@ -119,6 +119,8 @@ export default {
         this.form.trek_id = "";
         this.form.staff_id = "";
 
+        this.$router.push("/admin/staff");
+
       } catch (error) {
         console.log(error);
         alert(error.response?.data?.message || "Assignment failed");
